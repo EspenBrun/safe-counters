@@ -18,7 +18,7 @@ module Counter =
         | Increment
         | Decrement
 
-    let update msg model =
+    let update msg model : Model * Cmd<Msg> =
         printfn "Counter.update()"
         match msg with
         | Increment ->
@@ -29,48 +29,52 @@ module Counter =
 
     let view model dispatch =
         div []
-            [ button [ OnClick (fun _ -> dispatch Decrement) ] [ str "-" ]
+            [ button [ OnClick (fun _ -> dispatch Increment) ] [ str "+" ] 
               div [] [ str (model.ToString()) ]
-              button [ OnClick (fun _ -> dispatch Increment) ] [ str "+" ] ]
+              button [ OnClick (fun _ -> dispatch Decrement) ] [ str "-" ]]
 
-type Model =
-    {
-        top : Counter.Model
-        bottom : Counter.Model }
+type Model = { Counters : Counter.Model list }
+
+type ID = int
 
 type Msg =
-    | Reset
-    | Top of Counter.Msg
-    | Bottom of Counter.Msg
+    | Add
+    | Remove
+    | Modify of ID * Counter.Msg
 
 let init() =
     printfn "Index.init()"
-    let top, topCmd = Counter.init()
-    let bottom, bottomCmd = Counter.init()
-    { top = top
-      bottom = bottom },
-    Cmd.batch [ Cmd.map Top topCmd
-                Cmd.map Bottom bottomCmd ]
+    { Counters = [] }, Cmd.none
+
+// let updateCorrectCounter (id : ID) (counterMsg : Counter.Msg) (i : int) (counterModel : Counter.Model) : Counter.Model * Cmd<Counter.Msg> =
+let updateCorrectCounter (id : ID) (counterMsg : Counter.Msg) (i : int) (counterModel : Counter.Model) : Counter.Model =
+    if i = id then
+        let model, _ = Counter.update counterMsg counterModel
+        model
+    else
+        counterModel
 
 let update msg model : Model * Cmd<Msg> =
     printfn "Index.update()"
     match msg with
-    | Reset ->
-        let top, topCmd = Counter.init()
-        let bottom, bottomCmd = Counter.init()
-        { top = top
-          bottom = bottom },
-        Cmd.batch [ Cmd.map Top topCmd
-                    Cmd.map Bottom bottomCmd ]
-    | Top msg' ->
-            let res, cmd = Counter.update msg' model.top
-            { model with top = res }, Cmd.map Top cmd
-
-    | Bottom msg' ->
-        let res, cmd = Counter.update msg' model.bottom
-        { model with bottom = res }, Cmd.map Bottom cmd
+    | Add ->
+        let m, _ = Counter.init()
+        { Counters = m :: model.Counters }, Cmd.none
+    | Remove  ->
+        { Counters = 
+            match model.Counters with
+            | [] -> []
+            | x :: rest -> rest}, Cmd.none
+    | Modify (id, counterMsg) ->
+        let theFunction = updateCorrectCounter id counterMsg
+        let counters = model.Counters |> List.mapi (fun i counterModel -> theFunction i counterModel )
+        { Counters = counters }, Cmd.none
 
 let view (model : Model) (dispatch : Msg -> unit) =
+    let counterDispatch i msg = dispatch (Modify (i, msg))
+
+    let counters = model.Counters |> List.mapi (fun i counter -> Counter.view counter (counterDispatch i))
+
     Hero.hero [
         Hero.Color IsPrimary
         Hero.IsFullHeight
@@ -93,10 +97,9 @@ let view (model : Model) (dispatch : Msg -> unit) =
                     Column.Width (Screen.All, Column.Is6)
                     Column.Offset (Screen.All, Column.Is3)
                 ] [
-                    yield Heading.p [ Heading.Modifiers [ Modifier.TextAlignment (Screen.All, TextAlignment.Centered) ] ] [ str "safe_azure_ad" ]
-                    yield button [ OnClick (fun _ -> dispatch Reset) ] [ str "Reset" ]
-                    yield Counter.view model.top (Top >> dispatch)
-                    yield Counter.view model.bottom (Bottom >> dispatch)
+                    yield button [ OnClick (fun _ -> dispatch Remove) ] [ str "Remove" ]
+                    yield button [ OnClick (fun _ -> dispatch Add) ] [ str "Add" ]
+                    yield! counters
                 ]
             ]
         ]
